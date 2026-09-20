@@ -1,0 +1,10 @@
+index=web sourcetype=access_combined
+| stats
+    count AS total_events
+    dc(host) AS web_servers
+    dc(source) AS log_sources
+    earliest(_time) AS first_event_epoch
+    latest(_time) AS last_event_epoch
+| eval first_event=strftime(first_event_epoch,"%Y-%m-%d %H:%M:%S")
+| eval last_event=strftime(last_event_epoch,"%Y-%m-%d %H:%M:%S")
+| table total_events web_servers log_sources first_event last_event
