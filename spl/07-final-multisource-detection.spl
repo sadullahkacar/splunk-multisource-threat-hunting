@@ -1,0 +1,45 @@
+(index=web sourcetype=access_combined)
+OR
+(index=security sourcetype=linux_secure "Failed password")
+| rex field=_raw "^(?<web_src_ip>\d{1,3}(?:\.\d{1,3}){3})"
+| rex field=_raw "from (?<ssh_src_ip>\d{1,3}(?:\.\d{1,3}){3})"
+| eval src_ip=coalesce(web_src_ip,ssh_src_ip)
+| eval activity_type=if(index="web","HTTP","SSH")
+| bin _time span=1h
+| stats
+    count(eval(activity_type="HTTP")) AS http_requests
+    count(eval(activity_type="SSH")) AS ssh_failures
+    dc(eval(if(activity_type="HTTP",host,NULL()))) AS web_hosts
+    dc(eval(if(activity_type="SSH",host,NULL()))) AS ssh_hosts
+    values(eval(if(activity_type="HTTP",host,NULL()))) AS targeted_web_hosts
+    values(eval(if(activity_type="SSH",host,NULL()))) AS targeted_ssh_hosts
+  by _time src_ip
+| where http_requests>0 AND ssh_failures>0
+| eval ssh_score=case(
+    ssh_failures>=100,40,
+    ssh_failures>=50,25,
+    ssh_failures>=20,10,
+    true(),0
+)
+| eval http_score=case(
+    http_requests>=25,20,
+    http_requests>=10,10,
+    http_requests>=5,5,
+    true(),0
+)
+| eval correlation_score=20
+| eval ssh_host_score=if(ssh_hosts>=3,10,0)
+| eval web_host_score=if(web_hosts>=3,10,0)
+| eval risk_score=ssh_score+http_score+correlation_score+ssh_host_score+web_host_score
+| eval severity=case(
+    risk_score>=80,"Critical",
+    risk_score>=60,"High",
+    risk_score>=40,"Medium",
+    true(),"Low"
+)
+| where risk_score>=40
+| iplocation src_ip
+| eval detection_time=strftime(_time,"%Y-%m-%d %H:%M:%S")
+| eval detection_reason="Concurrent HTTP and failed SSH activity from the same source IP"
+| sort - risk_score - ssh_failures
+| table detection_time src_ip Country City severity risk_score detection_reason http_requests ssh_failures web_hosts ssh_hosts targeted_web_hosts targeted_ssh_hosts
