@@ -1,0 +1,16 @@
+index=web sourcetype=access_combined
+| rex field=_raw "^(?<src_ip>\d{1,3}(?:\.\d{1,3}){3})"
+| rex field=_raw "\"(?<http_method>GET|POST|PUT|DELETE|HEAD|OPTIONS|PATCH)\s+(?<uri>\S+)\s+HTTP"
+| rex field=_raw "\"\s+(?<status>\d{3})\s+"
+| stats
+    count AS total_requests
+    dc(uri) AS unique_uris
+    count(eval(status>=400 AND status<500)) AS client_errors
+    dc(host) AS targeted_hosts
+    values(host) AS hosts
+  by src_ip
+| eval uri_ratio=round(unique_uris/total_requests,2)
+| eval error_rate=round((client_errors/total_requests)*100,2)
+| sort - total_requests
+| head 20
+| table src_ip total_requests unique_uris uri_ratio client_errors error_rate targeted_hosts hosts
