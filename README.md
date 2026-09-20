@@ -304,6 +304,9 @@ The final SPL combines:
 The complete detection is available here:
 
 [`spl/07-final-multisource-detection.spl`](spl/07-final-multisource-detection.spl)
+### Detection Results
+
+![Multi-Source High-Risk Detection Results](screenshots/detection-results.png)
 
 ---
 
