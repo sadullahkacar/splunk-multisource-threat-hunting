@@ -1,0 +1,17 @@
+index=web sourcetype=access_combined
+| rex field=_raw "^(?<src_ip>\d{1,3}(?:\.\d{1,3}){3})"
+| rex field=_raw "\"(?<http_method>GET|POST|PUT|DELETE|HEAD|OPTIONS|PATCH)\s+(?<uri>\S+)\s+HTTP"
+| stats
+    count AS total_requests
+    dc(uri) AS unique_uris
+    dc(host) AS targeted_hosts
+  by src_ip
+| eval uri_ratio=round(unique_uris/total_requests,2)
+| where unique_uris >= 100 AND uri_ratio >= 0.80 AND targeted_hosts >= 2
+| iplocation src_ip
+| where isnotnull(Country)
+| stats
+    sum(total_requests) AS suspicious_requests
+    dc(src_ip) AS source_ips
+  by Country
+| sort - suspicious_requests
